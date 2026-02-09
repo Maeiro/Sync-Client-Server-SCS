@@ -1186,7 +1186,7 @@ public final class UpdateCoordinator {
                 return;
             }
             for (String message : messages) {
-                minecraft.player.sendSystemMessage(Component.literal(message));
+                minecraft.player.displayClientMessage(Component.literal(message), false);
             }
         });
     }
@@ -1443,6 +1443,7 @@ public final class UpdateCoordinator {
         return normalized.trim();
     }
 }
+
 
 
 
