@@ -1,93 +1,183 @@
-Sync Client Server (SCS)
-========================
+## Sync Client Server (SCS)
 
-NeoForge mod that keeps client mods in sync with a server-provided modpack.
-The goal is to maintain server-client compatibility with a single in-game
-Update button, making the task of managing a server much easier.
+**Sync Client Server (SCS)** is a NeoForge mod designed to keep client mods and configurations synchronized with a server-provided modpack, reducing version mismatches and manual mod management.
 
-Fork notice
------------
-This project is a fork of `https://github.com/Place-Boy/MMMMM`
+With a single **in-game Update button** directly in the multiplayer server list, players can download the mods and configs required by the server in a simple and reliable way.
 
-Credits
--------
-- Original project by Place-Boy: `https://github.com/Place-Boy`
+---
 
-Key features
-------------
-- In-game update button on the multiplayer server list.
-- Confirmation screen (Yes/No) before starting the update, with quick access to cache cleanup.
-- modId-based sync: avoids duplicates when the .jar filename changes.
-- Optional /config update (enabled by default).
-- Optional removal list in `mods.zip` to delete specific client jars.
-- Optional mirror mode to make client `/mods` and `/config` 1:1 with the zips.
-- Per-server cache isolation (each server has its own checksums and downloaded zips).
-- Built-in file server to host `mods.zip` and `config.zip`.
+### 📸 Preview
 
-Server usage
-------------
-1) Start the server with the mod installed.
-2) Generate the packages:
-   - `/scs save-mods` -> creates `SCS/shared-files/mods.zip`
-   - `/scs save-config` -> creates `SCS/shared-files/config.zip`
-   - (optional) Add `modsToRemoveFromTheClient.json` to `mods.zip` to remove client jars
-3) The embedded file server runs on the `fileServerPort` value (default 25566).
+![In-game printscreen](https://cdn.modrinth.com/data/cached_images/db8c26c778d41e985b4b40c7b6f7a413436ecb98.png)
 
-Notes:
-- The commands bundle *all* mods/configs at once. You can also create `mods.zip`
-  and `config.zip` manually if you want to ship only specific files.
-- You can also include an optional `modsToRemoveFromTheClient.json` inside `mods.zip`
-  to delete specific jars from the client.
+---
 
-Client usage
-------------
-1) Open the server list and edit the target server.
-2) In **Download URL**, enter the server file host (IP or URL).
-   - Example: `127.0.0.1:25566` or `http://myserver:25566`
-   - If empty, SCS auto-fills `http://<server-host>:<fileServerPort>` when the server list opens.
-3) Return to the list and click **Update**.
-4) Confirm the update (Yes/No). Use **Clear cache** if you need to reset cached zips/checksums.
+### 🎯 Goal
+SCS aims to simplify server administration and improve player experience by making modpack updates **clear, predictable, and user-friendly**, without requiring external launchers or manual file management.
 
-Mod configuration
------------------
-Config file (COMMON): `config/scs-common.toml`
+---
 
-- `fileServerPort` (int): file server port.
-- `updateConfig` (bool): updates `/config` alongside `/mods` (default: true).
-- `mirrorMods` (bool): mirrors `/mods` to `mods.zip` (removes files not in the zip).
-- `mirrorConfig` (bool): mirrors `/config` to `config.zip` (removes files not in the zip).
+## ✨ What SCS Can Do
 
-How updates work
-----------------
-- The client downloads `mods.zip` and extracts it into `/mods`.
-- For each .jar, the mod reads its `modId` and removes any older version of the same mod,
-  even if the filename is different.
-- If `modsToRemoveFromTheClient.json` exists in `mods.zip`, any jar listed there is
-  removed from `/mods` during the update.
-- If `updateConfig=true`, it also downloads `config.zip` and extracts it into `/config`.
-- If `mirrorMods` or `mirrorConfig` is enabled, files not present in the zip are removed to keep the client 1:1.
-- Update UI shows summary and details.
+- In-game **Update button** in the multiplayer server list  
+- Confirmation screen with update summary and **Clear cache** option  
+- **modId-based synchronization** to prevent duplicated or outdated mods  
+- Optional synchronization of `/config` alongside `/mods`  
+- Optional **mirror mode** for `/mods` and `/config`  
+- Server-enforced removal of specific client mods  
+- Per-server isolated cache  
+- Built-in lightweight file server to host `mods.zip` and `config.zip`
 
-Removal list format
--------------------
-Create `modsToRemoveFromTheClient.json` inside `mods.zip` with a plain JSON array
-of jar file names:
+> ⚠️ **Important:**  
+> - **Mod updates require a game restart** to take effect  
+> - **Config updates do NOT require a restart** and are applied immediately
 
+---
+
+## 🎮 Client Usage (Simple & Automatic)
+
+The client workflow is intentionally minimal.
+
+### 1️⃣ Add the server
+- Add the server normally in the **Multiplayer** screen
+- The **Download URL** field is automatically filled using the server address and port
+- You may override it manually if needed
+
+Example:
+```
+http://myserver.com:25566
+```
+
+### 2️⃣ Update the client
+1. Select the server in the list
+2. Click **Update**
+3. Review the summary and confirm
+
+That’s it.  
+Restart the game **only if mods were updated**.
+
+### 🧹 Clear Cache
+Use **Clear cache** from the confirmation screen if:
+- A download fails
+- The client becomes out of sync
+- ZIP contents changed but no update is triggered
+- Other unexpected behaviors
+
+Cache is isolated per server and safe to clear.
+
+---
+
+## 🖥️ Server Usage (Admin Guide)
+
+### 1️⃣ Install and start
+- Install SCS on the server
+- Start the server once to generate the config file
+
+---
+
+### 2️⃣ Common Configuration
+Config file:
+```
+config/scs-common.toml
+```
+
+Default values:
+```toml
+fileServerPort = 25566
+updateConfig = true
+mirrorMods = false
+mirrorConfig = false
+```
+
+**Explanation:**
+- `fileServerPort`  
+  Port used by the built-in file server (default: `25566`)
+- `updateConfig`  
+  Enables client config updates (enabled by default)
+- `mirrorMods` / `mirrorConfig`  
+  Disabled by default. When enabled, client folders are forced to exactly match the ZIP files
+
+Because `updateConfig` is enabled by default, server admins can **enable or disable config synchronization at any time**, without requiring client-side changes.
+
+---
+
+### 3️⃣ Creating the update packages
+
+#### Option A: Using in-game commands
+On the server, run:
+```
+/scs save-mods
+/scs save-config
+```
+
+This generates:
+- `mods.zip`
+- `config.zip`
+
+---
+
+#### Option B: Manual ZIP creation (advanced / recommended for control)
+Admins may **manually create or edit**:
+- `mods.zip`
+- `config.zip`
+
+This allows:
+- Shipping only specific mods or configs
+- Full control over update contents
+
+Both methods are fully supported.
+
+---
+
+### 4️⃣ Removing client mods (server-enforced)
+To force the removal of specific client mods:
+
+1. Create a file named:
+```
+modsToRemoveFromTheClient.json
+```
+
+2. Place it **inside `mods.zip`**
+3. List the `.jar` filenames to remove
+
+Example:
 ```json
 [
-  "banana1.jar",
-  "banana2.jar"
+  "examplemod1.jar",
+  "examplemod2.jar"
 ]
 ```
 
-Tips / Troubleshooting
-----------------------
-- Use **Clear cache** to remove cached zips/checksums if something gets stuck.
-- Clearing cache for a server also removes its saved Download URL from metadata.
+These mods will be deleted from the client during the update.
 
-Cache layout
-------------
-Each server has its own cache folder:
-- `SCS/servers/<server-id>/shared-files/`
-- `SCS/servers/<server-id>/mods_checksums.json`
-- `SCS/servers/<server-id>/config_checksums.json`
+---
+
+### 5️⃣ Built-in File Server
+When the server is running, SCS automatically hosts:
+- `mods.zip`
+- `config.zip`
+
+On:
+```
+<server-ip>:fileServerPort
+```
+
+Default:
+```
+<server-ip>:25566
+```
+
+No external web server is required.
+
+---
+
+### 📦 Modpack Usage
+Feel free to include this mod in your modpack — credits are appreciated but not required.
+
+---
+
+### ❤️ Credits & Fork Notice
+This project is a **fork of the mod _MMMMM_** by **Place-Boy**.  
+Original project: https://www.curseforge.com/minecraft/mc-mods/mmmmm  
+
+All credit for the original concept and foundation goes to the original author.
