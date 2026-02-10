@@ -87,3 +87,20 @@ publishing {
         }
     }
 }
+
+tasks.named('jar', Jar).configure {
+    archiveClassifier = ''
+    destinationDirectory = layout.buildDirectory.dir('libs')
+}
+
+tasks.named('sourcesJar', Jar).configure {
+    destinationDirectory = layout.buildDirectory.dir('libs')
+}
+
+tasks.named('remapJar').configure {
+    enabled = false
+}
+
+tasks.named('remapSourcesJar').configure {
+    enabled = false
+}
