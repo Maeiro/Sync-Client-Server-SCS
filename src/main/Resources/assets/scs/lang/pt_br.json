@@ -61,5 +61,17 @@
     "screen.scs.files":  "arquivos",
     "screen.scs.source.local":  "local",
     "screen.scs.source.server":  "servidor",
-    "screen.scs.warn_self_update":  "Aviso: mods.zip contem SCS %s (atual: %s). Ele sera ignorado enquanto o jogo estiver rodando e deve ser atualizado com o jogo fechado."
+    "screen.scs.warn_self_update":  "Aviso: mods.zip contem SCS %s (atual: %s). Ele sera ignorado enquanto o jogo estiver rodando e deve ser atualizado com o jogo fechado.",
+    "screen.scs.processing_preparing":  "Preparando %s...",
+    "screen.scs.processing_validating":  "Validando download...",
+    "screen.scs.processing_comparing":  "Comparando checksums de %s...",
+    "screen.scs.processing_scanning_files":  "Escaneando arquivos...",
+    "screen.scs.processing_scanning_zip":  "Escaneando entradas do zip...",
+    "screen.scs.processing_extracting_mods":  "Extraindo mods...",
+    "screen.scs.processing_removing_mods":  "Removendo mods...",
+    "screen.scs.processing_apply_list":  "Aplicando %s",
+    "screen.scs.processing_indexing_mods":  "Indexando mods instalados...",
+    "screen.scs.mirror_removed":  "Mirror removeu %s arquivo(s) extra(s) de %s.",
+    "screen.scs.mods_removed_by_list":  "Mods removidos pela lista: %s",
+    "screen.scs.mods_remove_invalid":  "Entradas invalidas em %s: %s"
 }

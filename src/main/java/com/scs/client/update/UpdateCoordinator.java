@@ -8,7 +8,7 @@ import com.scs.core.SCS;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
-import net.neoforged.fml.ModList;
+import net.fabricmc.loader.api.FabricLoader;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -38,6 +38,7 @@ import java.util.zip.ZipFile;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
 import org.json.JSONArray;
+import org.json.JSONObject;
 import com.moandjiezana.toml.Toml;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
@@ -121,6 +122,7 @@ public final class UpdateCoordinator {
     }
 
     public static void startUpdate(String updateBaseUrl, Screen returnScreenOverride, String serverKey) {
+        Config.reload();
         Minecraft minecraft = Minecraft.getInstance();
         Screen returnScreen = returnScreenOverride != null ? returnScreenOverride : minecraft.screen;
         ServerCachePaths cachePaths = buildServerCachePaths(resolveServerKey(serverKey, updateBaseUrl));
@@ -144,6 +146,7 @@ public final class UpdateCoordinator {
     }
 
     public static void clearCache(Screen returnScreen, String serverKey) {
+        Config.reload();
         Minecraft minecraft = Minecraft.getInstance();
         ServerCachePaths cachePaths = buildServerCachePaths(resolveServerKey(serverKey, null));
         DownloadProgressScreen progressScreen = new DownloadProgressScreen(tr("screen.scs.label.cache"), tr("screen.scs.source.local"), returnScreen);
@@ -474,7 +477,7 @@ public final class UpdateCoordinator {
             return UpdateOutcome.cancelled();
         }
 
-        minecraft.execute(() -> progressScreen.startProcessing("Preparing " + displayName + "...", "Validating download..."));
+        minecraft.execute(() -> progressScreen.startProcessing(tr("screen.scs.processing_preparing", displayName), tr("screen.scs.processing_validating")));
         validateDownloadedFile(downloadPath, displayName);
         prepareDestinationDirectory(unzipDestination);
         Set<String> extractedFiles = null;
@@ -497,7 +500,7 @@ public final class UpdateCoordinator {
             }
             MirrorResult mirrorResult = mirrorDirectoryContents(unzipDestination, mirrorAllowed, progressScreen, displayName);
             if (summaryExtras != null && mirrorResult.removedFiles > 0) {
-                summaryExtras.add("Mirror removed " + mirrorResult.removedFiles + " extra file(s) from " + displayName + ".");
+                summaryExtras.add(tr("screen.scs.mirror_removed", mirrorResult.removedFiles, displayName));
             }
         }
         Checksum.ChecksumDiff diff;
@@ -626,14 +629,14 @@ public final class UpdateCoordinator {
             boolean jarOnly
     ) throws Exception {
         LOGGER.info("Comparing checksums...");
-        updateProcessing(progressScreen, "Comparing " + displayName + " checksums...", "Scanning files...", 0, false);
+        updateProcessing(progressScreen, tr("screen.scs.processing_comparing", displayName), tr("screen.scs.processing_scanning_files"), 0, false);
         Checksum.ProgressListener listener = (current, total, fileName) -> {
             boolean hasTotal = total > 0;
             int progress = hasTotal ? (int) ((current * 100L) / total) : 0;
             String detail = hasTotal
                     ? String.format("%d/%d: %s", current, total, fileName)
                     : String.format("%d files... %s", current, fileName);
-            updateProcessing(progressScreen, "Comparing " + displayName + " checksums...", detail, progress, total > 0);
+            updateProcessing(progressScreen, tr("screen.scs.processing_comparing", displayName), detail, progress, total > 0);
         };
 
         Checksum.ChecksumResult result;
@@ -663,6 +666,16 @@ public final class UpdateCoordinator {
 
         private MirrorResult(int removedFiles, int removedDirs) {
             this.removedFiles = removedFiles;
+        }
+    }
+
+    private static final class JarModMetadata {
+        private final Set<String> modIds;
+        private final Map<String, String> modVersions;
+
+        private JarModMetadata(Set<String> modIds, Map<String, String> modVersions) {
+            this.modIds = modIds;
+            this.modVersions = modVersions;
         }
     }
 
@@ -845,7 +858,7 @@ public final class UpdateCoordinator {
                 String detail = total > 0
                         ? String.format("%d/%d: %s", current, total, entryName)
                         : entryName;
-                updateProcessing(progressScreen, "Extracting mods...", detail, progress, total > 0);
+                updateProcessing(progressScreen, tr("screen.scs.processing_extracting_mods"), detail, progress, total > 0);
 
                 if (entry.isDirectory()) {
                     Files.createDirectories(entryPath);
@@ -864,9 +877,9 @@ public final class UpdateCoordinator {
                     Set<String> modIds = Collections.emptySet();
                     Map<String, String> modVersions = Collections.emptyMap();
                     try {
-                        Toml toml = readTomlFromJarBytes(jarBytes);
-                        modIds = extractModIdsFromToml(toml);
-                        modVersions = extractModVersionsFromToml(toml);
+                        JarModMetadata metadata = getModMetadataFromJarBytes(jarBytes);
+                        modIds = metadata.modIds;
+                        modVersions = metadata.modVersions;
                     } catch (Exception e) {
                         LOGGER.warn("Failed to identify modId for {} - extracting without duplicate cleanup.", entryName, e);
                     }
@@ -929,17 +942,17 @@ public final class UpdateCoordinator {
         }
 
         if (!modsToRemove.isEmpty()) {
-            updateProcessing(progressScreen, "Removing mods...", "Applying " + MODS_REMOVE_LIST_NAME, 0, false);
+            updateProcessing(progressScreen, tr("screen.scs.processing_removing_mods"), tr("screen.scs.processing_apply_list", MODS_REMOVE_LIST_NAME), 0, false);
             RemovalResult removal = removeModsByName(destination, modsToRemove, progressScreen);
             if (summaryExtras != null) {
                 if (!removal.removed.isEmpty()) {
-                    summaryExtras.add("Mods removed by list: " + String.join(", ", removal.removed));
+                    summaryExtras.add(tr("screen.scs.mods_removed_by_list", String.join(", ", removal.removed)));
                 }
                 if (!removal.missing.isEmpty()) {
                     LOGGER.info("Mods requested for removal but not found: {}", String.join(", ", removal.missing));
                 }
                 if (!removal.invalid.isEmpty()) {
-                    summaryExtras.add("Invalid entries in " + MODS_REMOVE_LIST_NAME + ": " + String.join(", ", removal.invalid));
+                    summaryExtras.add(tr("screen.scs.mods_remove_invalid", MODS_REMOVE_LIST_NAME, String.join(", ", removal.invalid)));
                 }
             }
         }
@@ -975,7 +988,7 @@ public final class UpdateCoordinator {
                 String detail = total > 0
                         ? String.format("%d/%d: %s", current, total, jarPath.getFileName())
                         : jarPath.getFileName().toString();
-                updateProcessing(progressScreen, "Indexing installed mods...", detail, progress, total > 0);
+                updateProcessing(progressScreen, tr("screen.scs.processing_indexing_mods"), detail, progress, total > 0);
             }
 
             try {
@@ -994,19 +1007,94 @@ public final class UpdateCoordinator {
         return byId;
     }
     private static Set<String> getModIdsFromJarFile(Path jarPath) throws Exception {
+        return getModMetadataFromJarFile(jarPath).modIds;
+    }
+
+    private static JarModMetadata getModMetadataFromJarFile(Path jarPath) throws Exception {
         try (ZipFile zipFile = new ZipFile(jarPath.toFile())) {
-            ZipEntry entry = zipFile.getEntry("META-INF/neoforge.mods.toml");
-            if (entry == null) {
-                entry = zipFile.getEntry("META-INF/mods.toml");
+            Toml toml = readTomlFromZipFile(zipFile);
+            JSONObject fabricModJson = readFabricModJsonFromZipFile(zipFile);
+            return buildJarModMetadata(toml, fabricModJson);
+        }
+    }
+
+    private static JarModMetadata getModMetadataFromJarBytes(byte[] jarBytes) throws Exception {
+        Toml toml = readTomlFromJarBytes(jarBytes);
+        JSONObject fabricModJson = readFabricModJsonFromJarBytes(jarBytes);
+        return buildJarModMetadata(toml, fabricModJson);
+    }
+
+    private static JarModMetadata buildJarModMetadata(Toml toml, JSONObject fabricModJson) {
+        Set<String> modIds = new HashSet<>(extractModIdsFromToml(toml));
+        Map<String, String> modVersions = new HashMap<>(extractModVersionsFromToml(toml));
+        mergeFabricMetadata(fabricModJson, modIds, modVersions);
+        return new JarModMetadata(modIds, modVersions);
+    }
+
+    private static void mergeFabricMetadata(JSONObject fabricModJson, Set<String> modIds, Map<String, String> modVersions) {
+        if (fabricModJson == null) {
+            return;
+        }
+
+        String id = fabricModJson.optString("id", "").trim();
+        String version = String.valueOf(fabricModJson.opt("version")).trim();
+        if ("null".equalsIgnoreCase(version)) {
+            version = "";
+        }
+
+        if (!id.isBlank()) {
+            String normalizedId = id.toLowerCase(Locale.ROOT);
+            modIds.add(normalizedId);
+            if (!version.isBlank()) {
+                modVersions.put(normalizedId, version);
             }
-            if (entry == null) {
-                return Collections.emptySet();
+        }
+
+        JSONArray provides = fabricModJson.optJSONArray("provides");
+        if (provides == null) {
+            return;
+        }
+
+        for (int i = 0; i < provides.length(); i++) {
+            Object provided = provides.opt(i);
+            String providedId = "";
+
+            if (provided instanceof String providedString) {
+                providedId = providedString.trim();
+            } else if (provided instanceof JSONObject providedObject) {
+                providedId = providedObject.optString("id", "").trim();
             }
 
-            try (InputStream is = zipFile.getInputStream(entry)) {
-                Toml toml = new Toml().read(is);
-                return extractModIdsFromToml(toml);
+            if (!providedId.isBlank()) {
+                String normalizedProvidedId = providedId.toLowerCase(Locale.ROOT);
+                modIds.add(normalizedProvidedId);
+                if (!version.isBlank()) {
+                    modVersions.putIfAbsent(normalizedProvidedId, version);
+                }
             }
+        }
+    }
+
+    private static Toml readTomlFromZipFile(ZipFile zipFile) throws Exception {
+        ZipEntry entry = zipFile.getEntry("META-INF/mods.toml");
+        if (entry == null) {
+            return null;
+        }
+
+        try (InputStream is = zipFile.getInputStream(entry)) {
+            return new Toml().read(is);
+        }
+    }
+
+    private static JSONObject readFabricModJsonFromZipFile(ZipFile zipFile) throws Exception {
+        ZipEntry entry = zipFile.getEntry("fabric.mod.json");
+        if (entry == null) {
+            return null;
+        }
+
+        try (InputStream is = zipFile.getInputStream(entry)) {
+            String jsonContent = new String(is.readAllBytes(), StandardCharsets.UTF_8);
+            return new JSONObject(jsonContent);
         }
     }
 
@@ -1016,10 +1104,26 @@ public final class UpdateCoordinator {
             while ((jarEntry = jarZip.getNextEntry()) != null) {
                 String name = jarEntry.getName();
                 if (!jarEntry.isDirectory()
-                        && ("META-INF/neoforge.mods.toml".equals(name) || "META-INF/mods.toml".equals(name))) {
+                        && "META-INF/mods.toml".equals(name)) {
                     ByteArrayOutputStream baos = new ByteArrayOutputStream();
                     jarZip.transferTo(baos);
                     return new Toml().read(new ByteArrayInputStream(baos.toByteArray()));
+                }
+                jarZip.closeEntry();
+            }
+        }
+        return null;
+    }
+
+    private static JSONObject readFabricModJsonFromJarBytes(byte[] jarBytes) throws Exception {
+        try (ZipInputStream jarZip = new ZipInputStream(new ByteArrayInputStream(jarBytes))) {
+            ZipEntry jarEntry;
+            while ((jarEntry = jarZip.getNextEntry()) != null) {
+                if (!jarEntry.isDirectory() && "fabric.mod.json".equals(jarEntry.getName())) {
+                    ByteArrayOutputStream baos = new ByteArrayOutputStream();
+                    jarZip.transferTo(baos);
+                    String jsonContent = baos.toString(StandardCharsets.UTF_8);
+                    return new JSONObject(jsonContent);
                 }
                 jarZip.closeEntry();
             }
@@ -1272,7 +1376,7 @@ public final class UpdateCoordinator {
                 String detail = total > 0
                         ? String.format("%d/%d: %s", current, total, fileName)
                         : fileName;
-                updateProcessing(progressScreen, "Removing mods...", detail, progress, total > 0);
+                updateProcessing(progressScreen, tr("screen.scs.processing_removing_mods"), detail, progress, total > 0);
             }
 
             String key = fileName.toLowerCase(Locale.ROOT);
@@ -1310,9 +1414,9 @@ public final class UpdateCoordinator {
     }
 
     private static String getCurrentModVersion() {
-        return ModList.get()
-                .getModContainerById(SCS.MODID)
-                .map(container -> container.getModInfo().getVersion().toString())
+        return FabricLoader.getInstance()
+                .getModContainer(SCS.MODID)
+                .map(container -> container.getMetadata().getVersion().getFriendlyString())
                 .orElse("unknown");
     }
 
@@ -1389,7 +1493,7 @@ public final class UpdateCoordinator {
             String rootPrefixToStrip
     ) throws Exception {
         LOGGER.info("Comparing checksums...");
-        updateProcessing(progressScreen, "Comparing " + displayName + " checksums...", "Scanning zip entries...", 0, false);
+        updateProcessing(progressScreen, tr("screen.scs.processing_comparing", displayName), tr("screen.scs.processing_scanning_zip"), 0, false);
 
         Map<String, String> newChecksums = new HashMap<>();
         try (ZipFile zipFile = new ZipFile(zipPath.toFile())) {
@@ -1409,7 +1513,7 @@ public final class UpdateCoordinator {
                 String detail = total > 0
                         ? String.format("%d/%d: %s", current, total, entryName)
                         : entryName;
-                updateProcessing(progressScreen, "Comparing " + displayName + " checksums...", detail, progress, total > 0);
+                updateProcessing(progressScreen, tr("screen.scs.processing_comparing", displayName), detail, progress, total > 0);
 
                 try (InputStream is = zipFile.getInputStream(entry)) {
                     newChecksums.put(entryName, Checksum.computeChecksum(is));
@@ -1443,6 +1547,12 @@ public final class UpdateCoordinator {
         return normalized.trim();
     }
 }
+
+
+
+
+
+
 
 
 

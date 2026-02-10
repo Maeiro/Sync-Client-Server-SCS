@@ -30,6 +30,7 @@ public class FileHostingServer {
             return;
         }
 
+        Config.reload();
         int port = Config.fileServerPort;
         // Create the shared-files directory if it does not exist
         if (!Files.exists(FILE_DIRECTORY)) {
@@ -123,3 +124,5 @@ public class FileHostingServer {
         }
     }
 }
+
+

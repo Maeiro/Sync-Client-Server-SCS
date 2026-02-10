@@ -1,165 +1,89 @@
 plugins {
-    id 'idea'
-    id 'java-library'
+    id 'fabric-loom' version '1.8-SNAPSHOT'
     id 'maven-publish'
-    id 'net.neoforged.moddev' version '2.0.78'
-    id 'com.gradleup.shadow' version '9.1.0'
-}
-
-tasks.named('wrapper', Wrapper).configure {
-    distributionType = Wrapper.DistributionType.BIN
 }
 
 version = mod_version
 group = mod_group_id
 
-repositories {
-    mavenLocal()
-    mavenCentral()
-}
-
 base {
     archivesName = mod_id
 }
 
-java.toolchain.languageVersion = JavaLanguageVersion.of(21)
-
-neoForge {
-    version = project.neo_version
-
-    parchment {
-        mappingsVersion = project.parchment_mappings_version
-        minecraftVersion = project.parchment_minecraft_version
-    }
-
-    runs {
-        client {
-            client()
-            systemProperty 'neoforge.enabledGameTestNamespaces', project.mod_id
-        }
-        server {
-            server()
-            systemProperty 'neoforge.enabledGameTestNamespaces', project.mod_id
-        }
-        gameTestServer {
-            type = "gameTestServer"
-            systemProperty 'neoforge.enabledGameTestNamespaces', project.mod_id
-        }
-        data {
-            data()
-            programArguments.addAll '--mod', project.mod_id, '--all',
-                    '--output', file('src/generated/resources/').getAbsolutePath(),
-                    '--existing', file('src/main/resources/').getAbsolutePath()
-        }
-        configureEach {
-            systemProperty 'forge.logging.markers', 'REGISTRIES'
-            logLevel = org.slf4j.event.Level.DEBUG
-        }
-    }
-
-    mods {
-        "${mod_id}" {
-            sourceSet(sourceSets.main)
-        }
-    }
-}
-
-sourceSets.main.resources { srcDir 'src/generated/resources' }
-
-configurations {
-    runtimeClasspath.extendsFrom localRuntime
-
-    // Resolvable configuration for shadow only, extending implementation
-    shadowImplementation {
-        canBeResolved = true
-        canBeConsumed = false
-        extendsFrom implementation
-    }
+repositories {
+    mavenLocal()
+    mavenCentral()
+    maven { url = 'https://maven.fabricmc.net/' }
 }
 
 dependencies {
+    minecraft "com.mojang:minecraft:${minecraft_version}"
+    mappings loom.officialMojangMappings()
+    modImplementation "net.fabricmc:fabric-loader:${loader_version}"
+    modImplementation "net.fabricmc.fabric-api:fabric-api:${fabric_api_version}"
+
     implementation 'com.moandjiezana.toml:toml4j:0.7.2'
     implementation 'org.json:json:20231013'
 }
 
-var replaceProperties = [
-        minecraft_version      : minecraft_version,
-        minecraft_version_range: minecraft_version_range,
-        neo_version            : neo_version,
-        neo_version_range      : neo_version_range,
-        loader_version_range   : loader_version_range,
-        mod_id                 : mod_id,
-        mod_name               : mod_name,
-        mod_license            : mod_license,
-        mod_version            : mod_version,
-        mod_authors            : mod_authors,
-        mod_description        : mod_description
+loom {
+    mods {
+        "${mod_id}" {
+            sourceSet sourceSets.main
+        }
+    }
+}
+
+sourceSets {
+    main {
+        java {
+            srcDirs = ['src/main/java', 'src/fabric/java', 'src/fabric/client/java']
+        }
+        resources {
+            srcDirs = ['src/main/Resources']
+        }
+    }
+}
+
+def fabricModProps = [
+        mod_id           : mod_id,
+        mod_name         : mod_name,
+        mod_version      : mod_version,
+        mod_description  : mod_description,
+        mod_authors      : mod_authors,
+        mod_license      : mod_license,
+        minecraft_version: minecraft_version,
+        loader_version   : loader_version
 ]
 
 tasks.named('processResources', ProcessResources).configure {
-    inputs.properties replaceProperties
-    filesMatching(['META-INF/neoforge.mods.toml']) {
-        expand replaceProperties
-    }
-}
-publishing {
-    publications {
-        register('mavenJava', MavenPublication) {
-            from components.java
-        }
-    }
-    repositories {
-        maven {
-            url "file://${project.projectDir}/repo"
-        }
+    inputs.properties(fabricModProps)
+    filesMatching('fabric.mod.json') {
+        expand(fabricModProps)
     }
 }
 
 tasks.withType(JavaCompile).configureEach {
     options.encoding = 'UTF-8'
+    options.release = 17
 }
 
-idea {
-    module {
-        downloadSources = true
-        downloadJavadoc = true
-    }
+java {
+    toolchain.languageVersion = JavaLanguageVersion.of(17)
+    withSourcesJar()
 }
 
-jar {
-    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
-    exclude 'META-INF/*.SF', 'META-INF/*.DSA', 'META-INF/*.RSA'
-}
-
-// Shadow JAR with only external dependencies relocated
-tasks.named('shadowJar', com.github.jengelman.gradle.plugins.shadow.tasks.ShadowJar).configure {
-    archiveClassifier.set("")
-
-    // Only include the specific dependencies we want to relocate
-    configurations = [project.configurations.shadowImplementation]
-    dependencies {
-        include(dependency('com.moandjiezana.toml:toml4j'))
-        include(dependency('org.json:json'))
+publishing {
+    publications {
+        create('mavenJava', MavenPublication) {
+            artifactId = mod_id
+            from components.java
+        }
     }
 
-    // Relocate the selected deps
-    relocate 'com.moandjiezana.toml', 'com.scs.shaded.toml'
-    relocate 'com.moandjiezana.github.oshi', 'com.scs.github.oshi'
-    relocate 'org.json', 'com.scs.shaded.json'
-
-    // Do NOT pull Minecraft/NeoForge/LWJGL/etc into the shaded jar
-    exclude 'net/minecraft/**'
-    exclude 'net/neoforged/**'
-    exclude 'org/lwjgl/**'
-
-    // Exclude test classes and resources
-    exclude 'META-INF/*.SF', 'META-INF/*.DSA', 'META-INF/*.RSA'
-    exclude 'test/**', '**/Test*.class', '**/*Test.class'
-
-    // Keep your own classes in the final jar; jar plugin will merge them
-    // so we do not exclude 'com/scs/**' here.
+    repositories {
+        maven {
+            url = layout.buildDirectory.dir('repo')
+        }
+    }
 }
-
-// Make the build task use shadowJar
-tasks.build.dependsOn tasks.shadowJar
-

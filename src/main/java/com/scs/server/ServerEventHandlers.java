@@ -1,24 +1,33 @@
 package com.scs.server;
 
+import com.scs.core.Config;
 import com.scs.core.SCS;
-import net.neoforged.api.distmarker.Dist;
-import net.neoforged.fml.common.EventBusSubscriber;
-import net.neoforged.bus.api.SubscribeEvent;
-import net.neoforged.fml.event.lifecycle.FMLCommonSetupEvent;
+import net.minecraft.server.MinecraftServer;
 
-/**
- * Handles server-side events.
- */
-@EventBusSubscriber(modid = SCS.MODID, bus = EventBusSubscriber.Bus.MOD, value = Dist.DEDICATED_SERVER)
-public class ServerEventHandlers {
+public final class ServerEventHandlers {
 
-    @SubscribeEvent
-    public static void onCommonSetup(FMLCommonSetupEvent event) {
+    private ServerEventHandlers() {
+    }
+
+    public static void onServerStarted(MinecraftServer server) {
+        if (server == null || !server.isDedicatedServer()) {
+            return;
+        }
+
+        Config.reload();
         try {
-            SCS.LOGGER.info("Performing common setup tasks.");
+            SCS.LOGGER.info("Starting SCS file hosting server for dedicated server lifecycle.");
             FileHostingServer.start();
         } catch (Exception e) {
-            SCS.LOGGER.error("Failed to start file hosting server: ", e);
+            SCS.LOGGER.error("Failed to start file hosting server", e);
         }
+    }
+
+    public static void onServerStopping(MinecraftServer server) {
+        if (server == null || !server.isDedicatedServer()) {
+            return;
+        }
+
+        FileHostingServer.stop();
     }
 }

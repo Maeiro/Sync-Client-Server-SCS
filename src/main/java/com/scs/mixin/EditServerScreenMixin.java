@@ -14,7 +14,7 @@ import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.Redirect;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
-import static com.mojang.text2speech.Narrator.LOGGER;
+import com.scs.core.SCS;
 
 @Mixin(EditServerScreen.class)
 public abstract class EditServerScreenMixin {
@@ -68,7 +68,7 @@ public abstract class EditServerScreenMixin {
 
     @Inject(method = "onAdd", at = @At("TAIL"))
     private void onSaveCustomField(CallbackInfo ci) {
-        LOGGER.info("onSaveCustomField called");
+        SCS.LOGGER.info("onSaveCustomField called");
         if (customField != null) {
             String customValue = customField.getValue();
             EditServerScreen screen = (EditServerScreen) (Object) this;
@@ -107,3 +107,4 @@ public abstract class EditServerScreenMixin {
         return 0;
     }
 }
+

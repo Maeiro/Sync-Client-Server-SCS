@@ -61,5 +61,17 @@
     "screen.scs.files":  "files",
     "screen.scs.source.local":  "local",
     "screen.scs.source.server":  "server",
-    "screen.scs.warn_self_update":  "Warning: mods.zip contains SCS %s (current: %s). It will be ignored while running and should be updated with the game closed."
+    "screen.scs.warn_self_update":  "Warning: mods.zip contains SCS %s (current: %s). It will be ignored while running and should be updated with the game closed.",
+    "screen.scs.processing_preparing":  "Preparing %s...",
+    "screen.scs.processing_validating":  "Validating download...",
+    "screen.scs.processing_comparing":  "Comparing %s checksums...",
+    "screen.scs.processing_scanning_files":  "Scanning files...",
+    "screen.scs.processing_scanning_zip":  "Scanning zip entries...",
+    "screen.scs.processing_extracting_mods":  "Extracting mods...",
+    "screen.scs.processing_removing_mods":  "Removing mods...",
+    "screen.scs.processing_apply_list":  "Applying %s",
+    "screen.scs.processing_indexing_mods":  "Indexing installed mods...",
+    "screen.scs.mirror_removed":  "Mirror removed %s extra file(s) from %s.",
+    "screen.scs.mods_removed_by_list":  "Mods removed by list: %s",
+    "screen.scs.mods_remove_invalid":  "Invalid entries in %s: %s"
 }

@@ -1,92 +1,134 @@
 package com.scs.core;
 
-import net.neoforged.bus.api.SubscribeEvent;
-import net.neoforged.api.distmarker.Dist;
-import net.neoforged.fml.common.EventBusSubscriber;
-import net.neoforged.fml.event.config.ModConfigEvent;
-import net.neoforged.fml.loading.FMLEnvironment;
-import net.neoforged.neoforge.common.ModConfigSpec;
+import com.moandjiezana.toml.Toml;
 
-/**
- * Config class to handle mod settings and updates.
- */
-@EventBusSubscriber(modid = SCS.MODID, bus = EventBusSubscriber.Bus.MOD)
-public class Config {
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.StandardOpenOption;
+import java.util.Locale;
 
-    private static final ModConfigSpec.Builder BUILDER = new ModConfigSpec.Builder();
+public final class Config {
 
-    private static final ModConfigSpec.ConfigValue<Integer> FILE_SERVER_PORT = BUILDER
-            .comment(
-                    "Port number for the file server to run on",
-                    "Default: 25566"
-            )
-            .define("fileServerPort", 25566);
-    private static final ModConfigSpec.ConfigValue<Boolean> UPDATE_CONFIG = BUILDER
-            .comment(
-                    "If true, the client will also update the config folder when pressing the update button.",
-                    "This downloads config.zip from the server and extracts it into /config.",
-                    "Default: true"
-            )
-            .define("updateConfig", true);
+    private static final Path CONFIG_FILE = Path.of("config", "scs-common.toml");
 
-    private static final ModConfigSpec.ConfigValue<Boolean> MIRROR_MODS = BUILDER
-            .comment(
-                    "If true, the client mods folder will be mirrored to mods.zip.",
-                    "Any mod jar not present in mods.zip will be removed during update.",
-                    "Default: false"
-            )
-            .define("mirrorMods", false);
+    private static final int DEFAULT_FILE_SERVER_PORT = 25566;
+    private static final boolean DEFAULT_UPDATE_CONFIG = true;
+    private static final boolean DEFAULT_MIRROR_MODS = false;
+    private static final boolean DEFAULT_MIRROR_CONFIG = false;
 
-    private static final ModConfigSpec.ConfigValue<Boolean> MIRROR_CONFIG = BUILDER
-            .comment(
-                    "If true, the client config folder will be mirrored to config.zip.",
-                    "Any config file not present in config.zip will be removed during update.",
-                    "Default: false"
-            )
-            .define("mirrorConfig", false);
+    public static volatile int fileServerPort = DEFAULT_FILE_SERVER_PORT;
+    public static volatile boolean updateConfig = DEFAULT_UPDATE_CONFIG;
+    public static volatile boolean mirrorMods = DEFAULT_MIRROR_MODS;
+    public static volatile boolean mirrorConfig = DEFAULT_MIRROR_CONFIG;
 
-    /**
-     * Compile the final specification.
-     */
-    static final ModConfigSpec SPEC = BUILDER.build();
+    private Config() {
+    }
 
-    public static int fileServerPort;
+    public static synchronized void load() {
+        try {
+            ensureConfigFileExists();
+            Toml toml = new Toml().read(CONFIG_FILE.toFile());
 
-    public static boolean updateConfig;
-    public static boolean mirrorMods;
-    public static boolean mirrorConfig;
+            fileServerPort = sanitizePort(readInt(toml, "fileServerPort", DEFAULT_FILE_SERVER_PORT));
+            updateConfig = readBoolean(toml, "updateConfig", DEFAULT_UPDATE_CONFIG);
+            mirrorMods = readBoolean(toml, "mirrorMods", DEFAULT_MIRROR_MODS);
+            mirrorConfig = readBoolean(toml, "mirrorConfig", DEFAULT_MIRROR_CONFIG);
 
-    /**
-     * Called when the configuration is loaded or updated. This ensures runtime
-     * variables always hold accurate, current values.
-     */
-    @SubscribeEvent
-    static void onLoad(final ModConfigEvent event) {
-        // Ensure the correct config type (COMMON) is loaded.
-        if (!event.getConfig().getSpec().equals(SPEC)) {
+            SCS.LOGGER.info(
+                    "Config loaded: fileServerPort={}, updateConfig={}, mirrorMods={}, mirrorConfig={}",
+                    fileServerPort,
+                    updateConfig,
+                    mirrorMods,
+                    mirrorConfig
+            );
+        } catch (Exception e) {
+            SCS.LOGGER.error("Failed to load config from {}. Using defaults.", CONFIG_FILE, e);
+            fileServerPort = DEFAULT_FILE_SERVER_PORT;
+            updateConfig = DEFAULT_UPDATE_CONFIG;
+            mirrorMods = DEFAULT_MIRROR_MODS;
+            mirrorConfig = DEFAULT_MIRROR_CONFIG;
+        }
+    }
+
+    public static synchronized void reload() {
+        load();
+    }
+
+    private static int sanitizePort(int value) {
+        return value > 0 && value <= 65535 ? value : DEFAULT_FILE_SERVER_PORT;
+    }
+
+    private static int readInt(Toml toml, String key, int fallback) {
+        Long numeric = toml.getLong(key);
+        if (numeric != null) {
+            return numeric.intValue();
+        }
+
+        String text = toml.getString(key);
+        if (text != null) {
+            try {
+                return Integer.parseInt(text.trim());
+            } catch (NumberFormatException ignored) {
+                return fallback;
+            }
+        }
+
+        return fallback;
+    }
+
+    private static boolean readBoolean(Toml toml, String key, boolean fallback) {
+        Boolean bool = toml.getBoolean(key);
+        if (bool != null) {
+            return bool;
+        }
+
+        String text = toml.getString(key);
+        if (text != null) {
+            String normalized = text.trim().toLowerCase(Locale.ROOT);
+            if ("true".equals(normalized)) {
+                return true;
+            }
+            if ("false".equals(normalized)) {
+                return false;
+            }
+        }
+
+        return fallback;
+    }
+
+    private static void ensureConfigFileExists() throws IOException {
+        Path parent = CONFIG_FILE.getParent();
+        if (parent != null) {
+            Files.createDirectories(parent);
+        }
+
+        if (Files.exists(CONFIG_FILE)) {
             return;
         }
 
-        // Update static values with configuration values
-        fileServerPort = FILE_SERVER_PORT.get();
+        String content = """
+                # Sync Client Server (SCS) common config
+                # Port used by the integrated file hosting server.
+                fileServerPort = 25566
 
-        updateConfig = UPDATE_CONFIG.get();
-        mirrorMods = MIRROR_MODS.get();
-        mirrorConfig = MIRROR_CONFIG.get();
+                # If true, client update also applies config.zip.
+                updateConfig = true
 
-        // Log configuration load
-        SCS.LOGGER.info("Configuration loaded:");
-        SCS.LOGGER.info("File Server Port: {}", fileServerPort);
-        SCS.LOGGER.info("Update Config: {}", updateConfig);
-        SCS.LOGGER.info("Mirror Mods: {}", mirrorMods);
-        SCS.LOGGER.info("Mirror Config: {}", mirrorConfig);
+                # If true, mirror client /mods with mods.zip exactly.
+                mirrorMods = false
 
-        if (FMLEnvironment.dist == Dist.DEDICATED_SERVER) {
-            try {
-                com.scs.server.FileHostingServer.restartIfPortChanged();
-            } catch (Exception e) {
-                SCS.LOGGER.error("Failed to apply file server config changes.", e);
-            }
-        }
+                # If true, mirror client /config with config.zip exactly.
+                mirrorConfig = false
+                """;
+
+        Files.writeString(
+                CONFIG_FILE,
+                content,
+                StandardOpenOption.CREATE,
+                StandardOpenOption.TRUNCATE_EXISTING,
+                StandardOpenOption.WRITE
+        );
+        SCS.LOGGER.info("Created default config at {}", CONFIG_FILE);
     }
 }
