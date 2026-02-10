@@ -97,7 +97,7 @@ mirrorConfig = false
 - `mirrorMods` / `mirrorConfig`  
   Disabled by default. When enabled, client folders are forced to exactly match the ZIP files
 
-Because `updateConfig` is enabled by default, server admins can **enable or disable config synchronization at any time**, without requiring client-side changes.
+Because updateConfig is enabled by default, server admins can push new configuration changes to clients, such as enabling or disabling mirror options.
 
 ---
 
