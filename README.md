@@ -1,6 +1,6 @@
 ﻿## Sync Client Server (SCS)
 
-**Sync Client Server (SCS)** is a NeoForge mod designed to keep client mods and configurations synchronized with a server-provided modpack, reducing version mismatches and manual mod management.
+**Sync Client Server (SCS)** is a mod designed to keep client mods and configurations synchronized with a server-provided modpack, reducing version mismatches and manual mod management.
 
 With a single **in-game Update button** directly in the multiplayer server list, players can download the mods and configs required by the server in a simple and reliable way.
 
