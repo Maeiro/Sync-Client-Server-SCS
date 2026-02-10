@@ -12,18 +12,18 @@ With a single **in-game Update button** directly in the multiplayer server list,
 
 ---
 
-### ðŸ“¸ Preview
+### 📸 Preview
 
 ![In-game printscreen](https://cdn.modrinth.com/data/cached_images/db8c26c778d41e985b4b40c7b6f7a413436ecb98.png)
 
 ---
 
-### ðŸŽ¯ Goal
+### 🎯 Goal
 SCS aims to simplify server administration and improve player experience by making modpack updates **clear, predictable, and user-friendly**, without requiring external launchers or manual file management.
 
 ---
 
-## âœ¨ What SCS Can Do
+## ✨ What SCS Can Do
 
 - In-game **Update button** in the multiplayer server list  
 - Confirmation screen with update summary and **Clear cache** option  
@@ -34,17 +34,17 @@ SCS aims to simplify server administration and improve player experience by maki
 - Per-server isolated cache  
 - Built-in lightweight file server to host `mods.zip` and `config.zip`
 
-> âš ï¸ **Important:**  
+> ⚠️ **Important:**  
 > - **Mod updates require a game restart** to take effect  
 > - **Config updates do NOT require a restart** and are applied immediately
 
 ---
 
-## ðŸŽ® Client Usage (Simple & Automatic)
+## 🎮 Client Usage (Simple & Automatic)
 
 The client workflow is intentionally minimal.
 
-### 1ï¸âƒ£ Add the server
+### 1️⃣ Add the server
 - Add the server normally in the **Multiplayer** screen
 - The **Download URL** field is automatically filled using the server address and port
 - You may override it manually if needed
@@ -54,15 +54,15 @@ Example:
 http://myserver.com:25566
 ```
 
-### 2ï¸âƒ£ Update the client
+### 2️⃣ Update the client
 1. Select the server in the list
 2. Click **Update**
 3. Review the summary and confirm
 
-Thatâ€™s it.  
+That’s it.  
 Restart the game **only if mods were updated**.
 
-### ðŸ§¹ Clear Cache
+### 🧹 Clear Cache
 Use **Clear cache** from the confirmation screen if:
 - A download fails
 - The client becomes out of sync
@@ -73,15 +73,15 @@ Cache is isolated per server and safe to clear.
 
 ---
 
-## ðŸ–¥ï¸ Server Usage (Admin Guide)
+## 🖥️ Server Usage (Admin Guide)
 
-### 1ï¸âƒ£ Install and start
+### 1️⃣ Install and start
 - Install SCS on the server
 - Start the server once to generate the config file
 
 ---
 
-### 2ï¸âƒ£ Common Configuration
+### 2️⃣ Common Configuration
 Config file:
 ```
 config/scs-common.toml
@@ -107,7 +107,7 @@ Because `updateConfig` is enabled by default, server admins can **enable or disa
 
 ---
 
-### 3ï¸âƒ£ Creating the update packages
+### 3️⃣ Creating the update packages
 
 #### Option A: Using in-game commands
 On the server, run:
@@ -135,7 +135,7 @@ Both methods are fully supported.
 
 ---
 
-### 4ï¸âƒ£ Removing client mods (server-enforced)
+### 4️⃣ Removing client mods (server-enforced)
 To force the removal of specific client mods:
 
 1. Create a file named:
@@ -158,7 +158,7 @@ These mods will be deleted from the client during the update.
 
 ---
 
-### 5ï¸âƒ£ Built-in File Server
+### 5️⃣ Built-in File Server
 When the server is running, SCS automatically hosts:
 - `mods.zip`
 - `config.zip`
@@ -177,12 +177,12 @@ No external web server is required.
 
 ---
 
-### ðŸ“¦ Modpack Usage
-Feel free to include this mod in your modpack â€” credits are appreciated but not required.
+### 📦 Modpack Usage
+Feel free to include this mod in your modpack — credits are appreciated but not required.
 
 ---
 
-### â¤ï¸ Credits & Fork Notice
+### ❤️ Credits & Fork Notice
 This project is a **fork of the mod _MMMMM_** by **Place-Boy**.  
 Original project: https://www.curseforge.com/minecraft/mc-mods/mmmmm  
 
