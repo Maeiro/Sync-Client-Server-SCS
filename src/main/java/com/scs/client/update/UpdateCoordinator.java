@@ -8,7 +8,7 @@ import com.scs.core.SCS;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
-import net.neoforged.fml.ModList;
+import net.minecraftforge.fml.ModList;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -33,18 +33,23 @@ import java.util.Locale;
 import java.util.Set;
 import java.util.stream.Collectors;
 import java.util.concurrent.ExecutorService;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import java.util.zip.ZipFile;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
-import org.json.JSONArray;
-import com.moandjiezana.toml.Toml;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 
 public final class UpdateCoordinator {
 
     private static final int CONNECTION_TIMEOUT_MS = 5000;
+    private static final long FILE_IO_TIMEOUT_MS = 15000L;
     private static final String MOD_ZIP_NAME = "mods.zip";
     private static final String CONFIG_ZIP_NAME = "config.zip";
     private static final String MODS_REMOVE_LIST_NAME = "modsToRemoveFromTheClient.json";
@@ -53,6 +58,10 @@ public final class UpdateCoordinator {
     private static final Path CONFIG_UNZIP_DESTINATION = Path.of("config");
     private static final Logger LOGGER = LoggerFactory.getLogger(UpdateCoordinator.class);
     private static final int MAX_CHANGE_LIST_ITEMS = 5;
+    private static final Pattern TOML_ASSIGNMENT_PATTERN =
+            Pattern.compile("^\\s*([A-Za-z0-9_.-]+)\\s*=\\s*\"((?:\\\\.|[^\"])*)\"");
+    private static final Pattern MODS_REMOVE_ITEM_PATTERN =
+            Pattern.compile("\\\"([^\\\"]*)\\\"");
 
     private UpdateCoordinator() {
     }
@@ -367,7 +376,7 @@ public final class UpdateCoordinator {
                     return;
                 }
             }
-        } catch (Exception e) {
+        } catch (Throwable e) {
             LOGGER.error("Failed to download or extract mods", e);
             UpdateSummary summary = buildUpdateSummary(updateBaseUrl, modsOutcome, configOutcome, true, summaryExtras);
             minecraft.execute(() -> progressScreen.showSummary(summary.title, summary.summaryLines, summary.detailLines));
@@ -415,7 +424,7 @@ public final class UpdateCoordinator {
                     null,
                     null
             );
-        } catch (Exception e) {
+        } catch (Throwable e) {
             LOGGER.error("Failed to download or extract config", e);
             return UpdateOutcome.failed();
         }
@@ -490,6 +499,12 @@ public final class UpdateCoordinator {
         } else {
             extractedFiles = extractZipFile(downloadPath, unzipDestination, progressScreen, displayName, "config/");
         }
+
+        if (progressScreen.isCancelled()) {
+            LOGGER.info("{} processing cancelled by user.", displayName);
+            return UpdateOutcome.cancelled();
+        }
+
         Set<String> mirrorAllowed = extractedFiles == null ? new HashSet<>() : new HashSet<>(extractedFiles);
         if (mirrorMode) {
             if (syncModsById) {
@@ -500,6 +515,12 @@ public final class UpdateCoordinator {
                 summaryExtras.add("Mirror removed " + mirrorResult.removedFiles + " extra file(s) from " + displayName + ".");
             }
         }
+
+        if (progressScreen.isCancelled()) {
+            LOGGER.info("{} processing cancelled by user.", displayName);
+            return UpdateOutcome.cancelled();
+        }
+
         Checksum.ChecksumDiff diff;
         if (mirrorMode) {
             diff = computeAndSaveChecksums(unzipDestination, checksumFile, progressScreen, displayName, null, false);
@@ -804,6 +825,7 @@ public final class UpdateCoordinator {
                         Files.copy(is, entryPath, StandardCopyOption.REPLACE_EXISTING);
                     }
                     extractedFiles.add(entryName.replace('\\', '/'));
+                    LOGGER.info("Extracted {} entry: {}", displayName, entryName);
                 }
             }
         }
@@ -829,10 +851,24 @@ public final class UpdateCoordinator {
 
             for (ZipEntry entry : entries) {
                 current++;
+
+                if (progressScreen.isCancelled()) {
+                    LOGGER.info("Mod extraction cancelled by user at entry {}/{}", current, total);
+                    break;
+                }
+
                 String entryName = entry.getName();
+                int progress = total > 0 ? (int) ((current * 100L) / total) : 0;
+                String detail = total > 0
+                        ? String.format("%d/%d: %s", current, total, entryName)
+                        : entryName;
+
+                LOGGER.info("Processing mods zip entry {}/{}: {}", current, total, entryName);
 
                 if (MODS_REMOVE_LIST_NAME.equals(entryName)) {
+                    updateProcessing(progressScreen, "Extracting mods...", detail, progress, total > 0);
                     modsToRemove = parseModsRemovalList(zipFile, entry);
+                    LOGGER.info("Parsed {} entries from {}", modsToRemove.size(), MODS_REMOVE_LIST_NAME);
                     continue;
                 }
 
@@ -841,10 +877,6 @@ public final class UpdateCoordinator {
                     throw new IOException("Blocked zip entry outside destination: " + entryName);
                 }
 
-                int progress = total > 0 ? (int) ((current * 100L) / total) : 0;
-                String detail = total > 0
-                        ? String.format("%d/%d: %s", current, total, entryName)
-                        : entryName;
                 updateProcessing(progressScreen, "Extracting mods...", detail, progress, total > 0);
 
                 if (entry.isDirectory()) {
@@ -864,9 +896,9 @@ public final class UpdateCoordinator {
                     Set<String> modIds = Collections.emptySet();
                     Map<String, String> modVersions = Collections.emptyMap();
                     try {
-                        Toml toml = readTomlFromJarBytes(jarBytes);
-                        modIds = extractModIdsFromToml(toml);
-                        modVersions = extractModVersionsFromToml(toml);
+                        String tomlText = readModsTomlTextFromJarBytes(jarBytes);
+                        modIds = extractModIdsFromTomlText(tomlText);
+                        modVersions = extractModVersionsFromTomlText(tomlText);
                     } catch (Exception e) {
                         LOGGER.warn("Failed to identify modId for {} - extracting without duplicate cleanup.", entryName, e);
                     }
@@ -906,7 +938,7 @@ public final class UpdateCoordinator {
                                 continue;
                             }
                             try {
-                                if (Files.deleteIfExists(installedJar)) {
+                                if (deleteFileIfExistsWithTimeout(installedJar, "remove old mod jar " + installedJar.getFileName())) {
                                     LOGGER.info("Removed old mod jar for modId {}: {}", modId, installedJar.getFileName());
                                 }
                             } catch (Exception e) {
@@ -917,13 +949,15 @@ public final class UpdateCoordinator {
                         existingModsById.put(modId, new ArrayList<>(List.of(entryPath)));
                     }
 
-                    Files.write(entryPath, jarBytes, StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING);
+                    writeBytesWithTimeout(entryPath, jarBytes, "write mod jar " + entryName);
                     extractedFiles.add(entryName.replace('\\', '/'));
+                    LOGGER.info("Extracted mods entry: {}", entryName);
                 } else {
                     try (InputStream is = zipFile.getInputStream(entry)) {
                         Files.copy(is, entryPath, StandardCopyOption.REPLACE_EXISTING);
                     }
                     extractedFiles.add(entryName.replace('\\', '/'));
+                    LOGGER.info("Extracted mods entry: {}", entryName);
                 }
             }
         }
@@ -995,22 +1029,26 @@ public final class UpdateCoordinator {
     }
     private static Set<String> getModIdsFromJarFile(Path jarPath) throws Exception {
         try (ZipFile zipFile = new ZipFile(jarPath.toFile())) {
-            ZipEntry entry = zipFile.getEntry("META-INF/neoforge.mods.toml");
-            if (entry == null) {
-                entry = zipFile.getEntry("META-INF/mods.toml");
-            }
-            if (entry == null) {
-                return Collections.emptySet();
-            }
-
-            try (InputStream is = zipFile.getInputStream(entry)) {
-                Toml toml = new Toml().read(is);
-                return extractModIdsFromToml(toml);
-            }
+            String tomlText = readModsTomlTextFromZipFile(zipFile);
+            return extractModIdsFromTomlText(tomlText);
         }
     }
 
-    private static Toml readTomlFromJarBytes(byte[] jarBytes) throws Exception {
+    private static String readModsTomlTextFromZipFile(ZipFile zipFile) throws IOException {
+        ZipEntry entry = zipFile.getEntry("META-INF/neoforge.mods.toml");
+        if (entry == null) {
+            entry = zipFile.getEntry("META-INF/mods.toml");
+        }
+        if (entry == null) {
+            return null;
+        }
+
+        try (InputStream is = zipFile.getInputStream(entry)) {
+            return new String(is.readAllBytes(), StandardCharsets.UTF_8);
+        }
+    }
+
+    private static String readModsTomlTextFromJarBytes(byte[] jarBytes) throws IOException {
         try (ZipInputStream jarZip = new ZipInputStream(new ByteArrayInputStream(jarBytes))) {
             ZipEntry jarEntry;
             while ((jarEntry = jarZip.getNextEntry()) != null) {
@@ -1019,7 +1057,7 @@ public final class UpdateCoordinator {
                         && ("META-INF/neoforge.mods.toml".equals(name) || "META-INF/mods.toml".equals(name))) {
                     ByteArrayOutputStream baos = new ByteArrayOutputStream();
                     jarZip.transferTo(baos);
-                    return new Toml().read(new ByteArrayInputStream(baos.toByteArray()));
+                    return baos.toString(StandardCharsets.UTF_8);
                 }
                 jarZip.closeEntry();
             }
@@ -1027,43 +1065,112 @@ public final class UpdateCoordinator {
         return null;
     }
 
-    private static Set<String> extractModIdsFromToml(Toml toml) {
-        if (toml == null) {
-            return Collections.emptySet();
-        }
-
+    private static Set<String> extractModIdsFromTomlText(String tomlText) {
         Set<String> modIds = new HashSet<>();
-        List<Toml> modsTables = toml.getTables("mods");
-        if (modsTables != null) {
-            for (Toml modTable : modsTables) {
-                String modId = modTable.getString("modId");
-                if (modId != null && !modId.isBlank()) {
-                    modIds.add(modId.toLowerCase(Locale.ROOT));
-                }
-            }
+        for (ModTomlEntry entry : parseModEntries(tomlText)) {
+            modIds.add(entry.modId);
         }
-
         return modIds;
     }
 
-    private static Map<String, String> extractModVersionsFromToml(Toml toml) {
-        if (toml == null) {
-            return Collections.emptyMap();
+    private static Map<String, String> extractModVersionsFromTomlText(String tomlText) {
+        Map<String, String> versions = new HashMap<>();
+        for (ModTomlEntry entry : parseModEntries(tomlText)) {
+            if (entry.version != null && !entry.version.isBlank()) {
+                versions.put(entry.modId, entry.version.trim());
+            }
+        }
+        return versions;
+    }
+
+    private static List<ModTomlEntry> parseModEntries(String tomlText) {
+        if (tomlText == null || tomlText.isBlank()) {
+            return Collections.emptyList();
         }
 
-        Map<String, String> versions = new HashMap<>();
-        List<Toml> modsTables = toml.getTables("mods");
-        if (modsTables != null) {
-            for (Toml modTable : modsTables) {
-                String modId = modTable.getString("modId");
-                String version = modTable.getString("version");
-                if (modId != null && !modId.isBlank() && version != null && !version.isBlank()) {
-                    versions.put(modId.toLowerCase(Locale.ROOT), version.trim());
+        List<ModTomlEntry> entries = new ArrayList<>();
+        boolean inModsSection = false;
+        String currentModId = null;
+        String currentVersion = null;
+
+        for (String rawLine : tomlText.split("\\R")) {
+            String line = rawLine.trim();
+            if (line.isEmpty() || line.startsWith("#")) {
+                continue;
+            }
+
+            if (line.startsWith("[[") && line.endsWith("]]")) {
+                if (inModsSection) {
+                    addModTomlEntry(entries, currentModId, currentVersion);
                 }
+                String normalizedSection = line.replaceAll("\\s+", "");
+                inModsSection = "[[mods]]".equalsIgnoreCase(normalizedSection);
+                currentModId = null;
+                currentVersion = null;
+                continue;
+            }
+
+            if (!inModsSection) {
+                continue;
+            }
+
+            String parsedModId = parseQuotedAssignmentValue(line, "modId");
+            if (parsedModId != null) {
+                currentModId = parsedModId;
+                continue;
+            }
+
+            String parsedVersion = parseQuotedAssignmentValue(line, "version");
+            if (parsedVersion != null) {
+                currentVersion = parsedVersion;
             }
         }
 
-        return versions;
+        if (inModsSection) {
+            addModTomlEntry(entries, currentModId, currentVersion);
+        }
+
+        return entries;
+    }
+
+    private static void addModTomlEntry(List<ModTomlEntry> entries, String modId, String version) {
+        if (modId == null || modId.isBlank()) {
+            return;
+        }
+        entries.add(new ModTomlEntry(modId.toLowerCase(Locale.ROOT), version));
+    }
+
+    private static String parseQuotedAssignmentValue(String line, String expectedKey) {
+        Matcher matcher = TOML_ASSIGNMENT_PATTERN.matcher(line);
+        if (!matcher.find()) {
+            return null;
+        }
+
+        String key = matcher.group(1);
+        if (!expectedKey.equalsIgnoreCase(key)) {
+            return null;
+        }
+
+        return unescapeTomlBasicString(matcher.group(2)).trim();
+    }
+
+    private static String unescapeTomlBasicString(String value) {
+        if (value == null || value.isEmpty()) {
+            return "";
+        }
+        return value
+                .replace("\\\"", "\"")
+                .replace("\\\\", "\\");
+    }
+
+    private static final class ModTomlEntry {
+        private final String modId;
+        private final String version;
+
+        private ModTomlEntry(String modId, String version) {
+            this.modId = modId;
+            this.version = version;
+        }
     }
 
     private static UpdateSummary buildUpdateSummary(
@@ -1208,13 +1315,51 @@ public final class UpdateCoordinator {
         minecraft.execute(() -> progressScreen.updateProcessing(title, detail, progress, hasProgress));
     }
 
+    private static boolean deleteFileIfExistsWithTimeout(Path filePath, String context) throws IOException {
+        return runFileIoWithTimeout(context, () -> Files.deleteIfExists(filePath));
+    }
+
+    private static void writeBytesWithTimeout(Path filePath, byte[] bytes, String context) throws IOException {
+        runFileIoWithTimeout(context, () -> {
+            Files.write(filePath, bytes, StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING);
+            return null;
+        });
+    }
+
+    private static <T> T runFileIoWithTimeout(String context, java.util.concurrent.Callable<T> ioTask) throws IOException {
+        ExecutorService ioExecutor = Executors.newSingleThreadExecutor(r -> {
+            Thread thread = new Thread(r, "scs-file-io");
+            thread.setDaemon(true);
+            return thread;
+        });
+
+        Future<T> future = ioExecutor.submit(ioTask);
+        try {
+            return future.get(FILE_IO_TIMEOUT_MS, TimeUnit.MILLISECONDS);
+        } catch (TimeoutException e) {
+            future.cancel(true);
+            throw new IOException("Timed out while trying to " + context, e);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new IOException("Interrupted while trying to " + context, e);
+        } catch (ExecutionException e) {
+            Throwable cause = e.getCause();
+            if (cause instanceof IOException ioException) {
+                throw ioException;
+            }
+            throw new IOException("Failed while trying to " + context, cause);
+        } finally {
+            ioExecutor.shutdownNow();
+        }
+    }
+
     private static List<String> parseModsRemovalList(ZipFile zipFile, ZipEntry entry) {
         try (InputStream is = zipFile.getInputStream(entry)) {
             String content = new String(is.readAllBytes(), StandardCharsets.UTF_8);
-            JSONArray array = new JSONArray(content);
             List<String> items = new ArrayList<>();
-            for (int i = 0; i < array.length(); i++) {
-                String value = array.optString(i, "").trim();
+            Matcher matcher = MODS_REMOVE_ITEM_PATTERN.matcher(content);
+            while (matcher.find()) {
+                String value = unescapeTomlBasicString(matcher.group(1)).trim();
                 if (!value.isBlank()) {
                     items.add(value);
                 }
@@ -1443,6 +1588,8 @@ public final class UpdateCoordinator {
         return normalized.trim();
     }
 }
+
+
 
 
 
