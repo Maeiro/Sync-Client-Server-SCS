@@ -174,7 +174,7 @@ public class DownloadProgressScreen extends Screen {
 
     @Override
     public void render(GuiGraphics guiGraphics, int mouseX, int mouseY, float partialTicks) {
-        this.renderBackground(guiGraphics, mouseX, mouseY, partialTicks);
+        this.renderBackground(guiGraphics);
 
         super.render(guiGraphics, mouseX, mouseY, partialTicks);
 
@@ -273,7 +273,7 @@ public class DownloadProgressScreen extends Screen {
     }
 
     @Override
-    public boolean mouseScrolled(double mouseX, double mouseY, double scrollX, double scrollY) {
+    public boolean mouseScrolled(double mouseX, double mouseY, double scrollDelta) {
         if (showSummary) {
             int totalLines = wrapLines(showDetails ? detailLines : summaryLines, Math.max(200, this.width - 40)).size();
             int top = 50;
@@ -281,11 +281,11 @@ public class DownloadProgressScreen extends Screen {
             int maxVisibleLines = Math.max(1, (bottom - top) / 12);
             int maxScroll = Math.max(0, totalLines - maxVisibleLines);
             if (maxScroll > 0) {
-                summaryScroll = Math.max(0, Math.min(maxScroll, summaryScroll - (int) Math.signum(scrollY)));
+                summaryScroll = Math.max(0, Math.min(maxScroll, summaryScroll - (int) Math.signum(scrollDelta)));
                 return true;
             }
         }
-        return super.mouseScrolled(mouseX, mouseY, scrollX, scrollY);
+        return super.mouseScrolled(mouseX, mouseY, scrollDelta);
     }
 
     private List<net.minecraft.util.FormattedCharSequence> wrapLines(List<String> lines, int maxWidth) {
