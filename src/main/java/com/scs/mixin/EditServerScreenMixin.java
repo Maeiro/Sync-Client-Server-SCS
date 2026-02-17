@@ -8,7 +8,6 @@ import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.gui.screens.EditServerScreen;
 import net.minecraft.network.chat.Component;
 import org.spongepowered.asm.mixin.Mixin;
-import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.Redirect;
@@ -18,8 +17,6 @@ import static com.mojang.text2speech.Narrator.LOGGER;
 
 @Mixin(EditServerScreen.class)
 public abstract class EditServerScreenMixin {
-
-    @Shadow public abstract void onClose();
 
     private int[] labelYPositions = new int[2]; // 0 = Server Name Y, 1 = Server Address Y
     private EditBox customField;
@@ -63,7 +60,26 @@ public abstract class EditServerScreenMixin {
             customField.setValue(existingMetadata);
         }
 
-        ((ScreenAccessorMixin) (Object) this).invokeAddRenderableWidget(customField);
+        addCustomFieldWidget(screen);
+    }
+
+
+    private void addCustomFieldWidget(EditServerScreen screen) {
+        try {
+            var method = EditServerScreen.class.getMethod("addRenderableWidget", net.minecraft.client.gui.components.events.GuiEventListener.class);
+            method.invoke(screen, customField);
+            return;
+        } catch (ReflectiveOperationException ignored) {
+        }
+
+        try {
+            var method = EditServerScreen.class.getMethod("addWidget", net.minecraft.client.gui.components.events.GuiEventListener.class);
+            method.invoke(screen, customField);
+            return;
+        } catch (ReflectiveOperationException ignored) {
+        }
+
+        throw new IllegalStateException("Unable to add SCS custom download URL field to EditServerScreen");
     }
 
     @Inject(method = "onAdd", at = @At("TAIL"))

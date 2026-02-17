@@ -111,10 +111,14 @@ var replaceProperties = [
 ]
 
 tasks.named('processResources', ProcessResources).configure {
+    dependsOn tasks.named('compileJava')
     exclude 'META-INF/neoforge.mods.toml'
     inputs.properties replaceProperties
     filesMatching(['META-INF/mods.toml']) {
         expand replaceProperties
+    }
+    from("$buildDir/tmp/compileJava/compileJava-refmap.json") {
+        rename { 'scs.refmap.json' }
     }
 }
 
