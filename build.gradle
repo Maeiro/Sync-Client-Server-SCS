@@ -139,6 +139,7 @@ tasks.named('jar', Jar).configure {
 
 tasks.named('shadowJar', com.github.jengelman.gradle.plugins.shadow.tasks.ShadowJar).configure {
     archiveClassifier.set('')
+    archiveFileName.set("${mod_id}-${mod_version}+forge-${minecraft_version}.jar")
 
     configurations = [project.configurations.shadowImplementation]
     dependencies {

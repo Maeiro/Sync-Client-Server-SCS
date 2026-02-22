@@ -6,7 +6,8 @@
   "mixins": [],
   "client": [
     "EditServerScreenMixin",
-    "EditServerScreenAccessor"
+    "EditServerScreenAccessor",
+    "ScreenCollectionsAccessor"
   ],
   "refmap": "scs.refmap.json"
 }

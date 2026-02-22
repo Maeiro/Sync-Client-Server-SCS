@@ -1,11 +1,16 @@
 package com.scs.mixin;
 
 import com.scs.client.ServerMetadata;
+import com.scs.core.SCS;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.CycleButton;
+import net.minecraft.client.gui.components.Renderable;
 import net.minecraft.client.gui.components.EditBox;
+import net.minecraft.client.gui.components.events.GuiEventListener;
+import net.minecraft.client.gui.narration.NarratableEntry;
 import net.minecraft.client.gui.screens.EditServerScreen;
+import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
@@ -13,7 +18,10 @@ import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.Redirect;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
-import static com.mojang.text2speech.Narrator.LOGGER;
+import java.lang.reflect.Method;
+import java.lang.reflect.Type;
+import java.lang.reflect.TypeVariable;
+import java.util.List;
 
 @Mixin(EditServerScreen.class)
 public abstract class EditServerScreenMixin {
@@ -65,26 +73,104 @@ public abstract class EditServerScreenMixin {
 
 
     private void addCustomFieldWidget(EditServerScreen screen) {
-        try {
-            var method = EditServerScreen.class.getMethod("addRenderableWidget", net.minecraft.client.gui.components.events.GuiEventListener.class);
-            method.invoke(screen, customField);
+        if (invokeNamedWidgetAdder(screen, "addRenderableWidget", true)
+                || invokeSignatureWidgetAdder(screen, EditServerScreen.class, true)
+                || invokeSignatureWidgetAdder(screen, Screen.class, true)
+                || invokeNamedWidgetAdder(screen, "addWidget", false)) {
             return;
-        } catch (ReflectiveOperationException ignored) {
         }
 
+        // Keep the screen functional even if another mod changes method accessibility/signatures.
+        SCS.LOGGER.warn("Could not attach SCS download URL field to EditServerScreen; continuing without custom field UI.");
+        customField = null;
+    }
+
+    private boolean invokeNamedWidgetAdder(EditServerScreen screen, String methodName, boolean requireRenderableAttach) {
         try {
-            var method = EditServerScreen.class.getMethod("addWidget", net.minecraft.client.gui.components.events.GuiEventListener.class);
+            Method method = Screen.class.getDeclaredMethod(methodName, GuiEventListener.class);
+            method.setAccessible(true);
             method.invoke(screen, customField);
-            return;
+            return !requireRenderableAttach || isRenderableAttached(screen);
         } catch (ReflectiveOperationException ignored) {
+            return false;
+        }
+    }
+
+    private boolean invokeSignatureWidgetAdder(EditServerScreen screen, Class<?> owner, boolean requireRenderableAdderSignature) {
+        for (Method method : owner.getDeclaredMethods()) {
+            Class<?>[] parameterTypes = method.getParameterTypes();
+            if (parameterTypes.length != 1) {
+                continue;
+            }
+            if (!GuiEventListener.class.isAssignableFrom(parameterTypes[0])) {
+                continue;
+            }
+            if (!GuiEventListener.class.isAssignableFrom(method.getReturnType())) {
+                continue;
+            }
+            if (requireRenderableAdderSignature && !isRenderableWidgetAdder(method)) {
+                continue;
+            }
+
+            try {
+                method.setAccessible(true);
+                method.invoke(screen, customField);
+                if (!requireRenderableAdderSignature || isRenderableAttached(screen)) {
+                    return true;
+                }
+                detachFailedWidgetAttach(screen);
+            } catch (ReflectiveOperationException ignored) {
+                // Try next candidate.
+            }
+        }
+        return false;
+    }
+
+
+    private boolean isRenderableAttached(EditServerScreen screen) {
+        ScreenCollectionsAccessor accessor = (ScreenCollectionsAccessor) (Object) screen;
+        List<Renderable> renderables = accessor.scs$getRenderables();
+        return renderables != null && renderables.contains(customField);
+    }
+
+    private void detachFailedWidgetAttach(EditServerScreen screen) {
+        ScreenCollectionsAccessor accessor = (ScreenCollectionsAccessor) (Object) screen;
+        List<Renderable> renderables = accessor.scs$getRenderables();
+        List<GuiEventListener> children = accessor.scs$getChildren();
+        if (renderables != null) {
+            renderables.removeIf(entry -> entry == customField);
+        }
+        if (children != null) {
+            children.removeIf(entry -> entry == customField);
+        }
+    }
+    private boolean isRenderableWidgetAdder(Method method) {
+        TypeVariable<Method>[] typeParameters = method.getTypeParameters();
+        if (typeParameters.length != 1) {
+            return false;
         }
 
-        throw new IllegalStateException("Unable to add SCS custom download URL field to EditServerScreen");
+        boolean hasGuiListener = false;
+        boolean hasRenderable = false;
+        boolean hasNarratable = false;
+        for (Type bound : typeParameters[0].getBounds()) {
+            if (!(bound instanceof Class<?> boundClass)) {
+                continue;
+            }
+            if (boundClass == GuiEventListener.class) {
+                hasGuiListener = true;
+            } else if (boundClass == Renderable.class) {
+                hasRenderable = true;
+            } else if (boundClass == NarratableEntry.class) {
+                hasNarratable = true;
+            }
+        }
+        return hasGuiListener && hasRenderable && hasNarratable;
     }
 
     @Inject(method = "onAdd", at = @At("TAIL"))
     private void onSaveCustomField(CallbackInfo ci) {
-        LOGGER.info("onSaveCustomField called");
+        SCS.LOGGER.info("onSaveCustomField called");
         if (customField != null) {
             String customValue = customField.getValue();
             EditServerScreen screen = (EditServerScreen) (Object) this;
