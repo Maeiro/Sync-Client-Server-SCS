@@ -908,23 +908,20 @@ public final class UpdateCoordinator {
                     }
 
                     boolean isSelfJar = modIds.contains(SCS.MODID.toLowerCase(Locale.ROOT));
-                    if (isSelfJar) {
-                        if (!warnedSelfUpdate && summaryExtras != null) {
-                            String zipVersion = modVersions.get(SCS.MODID.toLowerCase(Locale.ROOT));
-                            if (zipVersion != null
-                                    && currentModVersion != null
-                                    && !currentModVersion.isBlank()
-                                    && !"unknown".equalsIgnoreCase(currentModVersion)
-                                    && !zipVersion.contains("${")) {
-                                int comparison = compareVersions(zipVersion, currentModVersion);
-                                if (comparison != 0) {
-                                    summaryExtras.add(tr("screen.scs.warn_self_update", zipVersion, currentModVersion));
-                                    warnedSelfUpdate = true;
-                                }
+                    if (isSelfJar && !warnedSelfUpdate && summaryExtras != null) {
+                        String zipVersion = modVersions.get(SCS.MODID.toLowerCase(Locale.ROOT));
+                        if (zipVersion != null
+                                && currentModVersion != null
+                                && !currentModVersion.isBlank()
+                                && !"unknown".equalsIgnoreCase(currentModVersion)
+                                && !zipVersion.contains("${")) {
+                            int comparison = compareVersions(zipVersion, currentModVersion);
+                            if (comparison != 0) {
+                                summaryExtras.add(tr("screen.scs.warn_self_update", zipVersion, currentModVersion));
+                                warnedSelfUpdate = true;
                             }
                         }
-                        LOGGER.info("Skipping SCS self-jar update while mod is running: {}", entryName);
-                        continue;
+                        LOGGER.info("Applying SCS self-jar update during runtime: {}", entryName);
                     }
 
                     for (String modId : modIds) {
